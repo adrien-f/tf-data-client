@@ -3,7 +3,7 @@
 
 // Terraform Plugin RPC protocol version 6.9
 syntax = "proto3";
-option go_package = "github.com/adrien-f/opentofu-data-client/internal/tfplugin6";
+option go_package = "github.com/adrien-f/tf-data-client/internal/tfplugin6";
 
 import "google/protobuf/timestamp.proto";
 

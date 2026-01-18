@@ -12,13 +12,12 @@
 package tfplugin6
 
 import (
-	reflect "reflect"
-	sync "sync"
-	unsafe "unsafe"
-
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
+	reflect "reflect"
+	sync "sync"
+	unsafe "unsafe"
 )
 
 const (
@@ -5669,7 +5668,7 @@ const file_internal_tfplugin6_tfplugin6_proto_rawDesc = "" +
 	"\x16CloseEphemeralResource\x12).tfplugin6.CloseEphemeralResource.Request\x1a*.tfplugin6.CloseEphemeralResource.Response\x12Q\n" +
 	"\fGetFunctions\x12\x1f.tfplugin6.GetFunctions.Request\x1a .tfplugin6.GetFunctions.Response\x12Q\n" +
 	"\fCallFunction\x12\x1f.tfplugin6.CallFunction.Request\x1a .tfplugin6.CallFunction.Response\x12Q\n" +
-	"\fStopProvider\x12\x1f.tfplugin6.StopProvider.Request\x1a .tfplugin6.StopProvider.ResponseB;Z9github.com/adrien-f/opentofu-data-client/internal/tfplugin6b\x06proto3"
+	"\fStopProvider\x12\x1f.tfplugin6.StopProvider.Request\x1a .tfplugin6.StopProvider.ResponseB7Z5github.com/adrien-f/tf-data-client/internal/tfplugin6b\x06proto3"
 
 var (
 	file_internal_tfplugin6_tfplugin6_proto_rawDescOnce sync.Once
