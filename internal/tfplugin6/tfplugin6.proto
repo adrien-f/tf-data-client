@@ -1,0 +1,501 @@
+// Copyright (c) HashiCorp, Inc.
+// SPDX-License-Identifier: MPL-2.0
+
+// Terraform Plugin RPC protocol version 6.9
+syntax = "proto3";
+option go_package = "github.com/adrien-f/opentofu-data-client/internal/tfplugin6";
+
+import "google/protobuf/timestamp.proto";
+
+package tfplugin6;
+
+// DynamicValue is an opaque encoding of terraform data, with the field name
+// indicating the encoding scheme used.
+message DynamicValue {
+    bytes msgpack = 1;
+    bytes json = 2;
+}
+
+message Diagnostic {
+    enum Severity {
+        INVALID = 0;
+        ERROR = 1;
+        WARNING = 2;
+    }
+    Severity severity = 1;
+    string summary = 2;
+    string detail = 3;
+    AttributePath attribute = 4;
+}
+
+message FunctionError {
+    string text = 1;
+    optional int64 function_argument = 2;
+}
+
+message AttributePath {
+    message Step {
+        oneof selector {
+            string attribute_name = 1;
+            string element_key_string = 2;
+            int64 element_key_int = 3;
+        }
+    }
+    repeated Step steps = 1;
+}
+
+message StopProvider {
+    message Request {
+    }
+    message Response {
+        string Error = 1;
+    }
+}
+
+message RawState {
+    bytes json = 1;
+    map<string, string> flatmap = 2;
+}
+
+enum StringKind {
+    PLAIN = 0;
+    MARKDOWN = 1;
+}
+
+message Schema {
+    message Block {
+        int64 version = 1;
+        repeated Attribute attributes = 2;
+        repeated NestedBlock block_types = 3;
+        string description = 4;
+        StringKind description_kind = 5;
+        bool deprecated = 6;
+    }
+
+    message Attribute {
+        string name = 1;
+        bytes type = 2;
+        Object nested_type = 10;
+        string description = 3;
+        bool required = 4;
+        bool optional = 5;
+        bool computed = 6;
+        bool sensitive = 7;
+        StringKind description_kind = 8;
+        bool deprecated = 9;
+        bool write_only = 11;
+    }
+
+    message NestedBlock {
+        enum NestingMode {
+            INVALID = 0;
+            SINGLE = 1;
+            LIST = 2;
+            SET = 3;
+            MAP = 4;
+            GROUP = 5;
+        }
+
+        string type_name = 1;
+        Block block = 2;
+        NestingMode nesting = 3;
+        int64 min_items = 4;
+        int64 max_items = 5;
+    }
+
+    message Object {
+        enum NestingMode {
+            INVALID = 0;
+            SINGLE = 1;
+            LIST = 2;
+            SET = 3;
+            MAP = 4;
+        }
+
+        repeated Attribute attributes = 1;
+        NestingMode nesting = 3;
+        int64 min_items = 4 [deprecated = true];
+        int64 max_items = 5 [deprecated = true];
+    }
+
+    int64 version = 1;
+    Block block = 2;
+}
+
+message ResourceIdentitySchema {
+    message IdentityAttribute {
+        string name = 1;
+        bytes type = 2;
+        bool required_for_import = 3;
+        bool optional_for_import = 4;
+        string description = 5;
+    }
+
+    int64 version = 1;
+    repeated IdentityAttribute identity_attributes = 2;
+}
+
+message ResourceIdentityData {
+    DynamicValue identity_data = 1;
+}
+
+message Function {
+    repeated Parameter parameters = 1;
+    Parameter variadic_parameter = 2;
+    Return return = 3;
+    string summary = 4;
+    string description = 5;
+    StringKind description_kind = 6;
+    string deprecation_message = 7;
+
+    message Parameter {
+        string name = 1;
+        bytes type = 2;
+        bool allow_null_value = 3;
+        bool allow_unknown_values = 4;
+        string description = 5;
+        StringKind description_kind = 6;
+    }
+
+    message Return {
+        bytes type = 1;
+    }
+}
+
+message ServerCapabilities {
+    bool plan_destroy = 1;
+    bool get_provider_schema_optional = 2;
+    bool move_resource_state = 3;
+}
+
+message ClientCapabilities {
+    bool deferral_allowed = 1;
+    bool write_only_attributes_allowed = 2;
+}
+
+message Deferred {
+    enum Reason {
+        UNKNOWN = 0;
+        RESOURCE_CONFIG_UNKNOWN = 1;
+        PROVIDER_CONFIG_UNKNOWN = 2;
+        ABSENT_PREREQ = 3;
+    }
+    Reason reason = 1;
+}
+
+service Provider {
+    rpc GetMetadata(GetMetadata.Request) returns (GetMetadata.Response);
+    rpc GetProviderSchema(GetProviderSchema.Request) returns (GetProviderSchema.Response);
+    rpc GetResourceIdentitySchemas(GetResourceIdentitySchemas.Request) returns (GetResourceIdentitySchemas.Response);
+    rpc ValidateProviderConfig(ValidateProviderConfig.Request) returns (ValidateProviderConfig.Response);
+    rpc ValidateResourceConfig(ValidateResourceConfig.Request) returns (ValidateResourceConfig.Response);
+    rpc ValidateDataResourceConfig(ValidateDataResourceConfig.Request) returns (ValidateDataResourceConfig.Response);
+    rpc UpgradeResourceState(UpgradeResourceState.Request) returns (UpgradeResourceState.Response);
+    rpc UpgradeResourceIdentity(UpgradeResourceIdentity.Request) returns (UpgradeResourceIdentity.Response);
+    rpc ConfigureProvider(ConfigureProvider.Request) returns (ConfigureProvider.Response);
+    rpc ReadResource(ReadResource.Request) returns (ReadResource.Response);
+    rpc PlanResourceChange(PlanResourceChange.Request) returns (PlanResourceChange.Response);
+    rpc ApplyResourceChange(ApplyResourceChange.Request) returns (ApplyResourceChange.Response);
+    rpc ImportResourceState(ImportResourceState.Request) returns (ImportResourceState.Response);
+    rpc MoveResourceState(MoveResourceState.Request) returns (MoveResourceState.Response);
+    rpc ReadDataSource(ReadDataSource.Request) returns (ReadDataSource.Response);
+    rpc ValidateEphemeralResourceConfig(ValidateEphemeralResourceConfig.Request) returns (ValidateEphemeralResourceConfig.Response);
+    rpc OpenEphemeralResource(OpenEphemeralResource.Request) returns (OpenEphemeralResource.Response);
+    rpc RenewEphemeralResource(RenewEphemeralResource.Request) returns (RenewEphemeralResource.Response);
+    rpc CloseEphemeralResource(CloseEphemeralResource.Request) returns (CloseEphemeralResource.Response);
+    rpc GetFunctions(GetFunctions.Request) returns (GetFunctions.Response);
+    rpc CallFunction(CallFunction.Request) returns (CallFunction.Response);
+    rpc StopProvider(StopProvider.Request) returns (StopProvider.Response);
+}
+
+message GetMetadata {
+    message Request {
+    }
+    message Response {
+        ServerCapabilities server_capabilities = 1;
+        repeated Diagnostic diagnostics = 2;
+        repeated DataSourceMetadata data_sources = 3;
+        repeated ResourceMetadata resources = 4;
+        repeated FunctionMetadata functions = 5;
+        repeated EphemeralResourceMetadata ephemeral_resources = 6;
+    }
+    message FunctionMetadata {
+        string name = 1;
+    }
+    message DataSourceMetadata {
+        string type_name = 1;
+    }
+    message ResourceMetadata {
+        string type_name = 1;
+    }
+    message EphemeralResourceMetadata {
+        string type_name = 1;
+    }
+}
+
+message GetProviderSchema {
+    message Request {
+    }
+    message Response {
+        Schema provider = 1;
+        map<string, Schema> resource_schemas = 2;
+        map<string, Schema> data_source_schemas = 3;
+        repeated Diagnostic diagnostics = 4;
+        Schema provider_meta = 5;
+        ServerCapabilities server_capabilities = 6;
+        map<string, Function> functions = 7;
+        map<string, Schema> ephemeral_resource_schemas = 8;
+    }
+}
+
+message ValidateProviderConfig {
+    message Request {
+        DynamicValue config = 1;
+    }
+    message Response {
+        repeated Diagnostic diagnostics = 2;
+    }
+}
+
+message UpgradeResourceState {
+    message Request {
+        string type_name = 1;
+        int64 version = 2;
+        RawState raw_state = 3;
+    }
+    message Response {
+        DynamicValue upgraded_state = 1;
+        repeated Diagnostic diagnostics = 2;
+    }
+}
+
+message ValidateResourceConfig {
+    message Request {
+        string type_name = 1;
+        DynamicValue config = 2;
+        ClientCapabilities client_capabilities = 3;
+    }
+    message Response {
+        repeated Diagnostic diagnostics = 1;
+    }
+}
+
+message ValidateDataResourceConfig {
+    message Request {
+        string type_name = 1;
+        DynamicValue config = 2;
+    }
+    message Response {
+        repeated Diagnostic diagnostics = 1;
+    }
+}
+
+message ConfigureProvider {
+    message Request {
+        string terraform_version = 1;
+        DynamicValue config = 2;
+        ClientCapabilities client_capabilities = 3;
+    }
+    message Response {
+        repeated Diagnostic diagnostics = 1;
+    }
+}
+
+message ReadResource {
+    message Request {
+        string type_name = 1;
+        DynamicValue current_state = 2;
+        bytes private = 3;
+        DynamicValue provider_meta = 4;
+        ClientCapabilities client_capabilities = 5;
+        ResourceIdentityData current_identity = 6;
+    }
+    message Response {
+        DynamicValue new_state = 1;
+        repeated Diagnostic diagnostics = 2;
+        bytes private = 3;
+        Deferred deferred = 4;
+        ResourceIdentityData new_identity = 5;
+    }
+}
+
+message PlanResourceChange {
+    message Request {
+        string type_name = 1;
+        DynamicValue prior_state = 2;
+        DynamicValue proposed_new_state = 3;
+        DynamicValue config = 4;
+        bytes prior_private = 5;
+        DynamicValue provider_meta = 6;
+        ClientCapabilities client_capabilities = 7;
+        ResourceIdentityData prior_identity = 8;
+    }
+    message Response {
+        DynamicValue planned_state = 1;
+        repeated AttributePath requires_replace = 2;
+        bytes planned_private = 3;
+        repeated Diagnostic diagnostics = 4;
+        bool legacy_type_system = 5;
+        Deferred deferred = 6;
+        ResourceIdentityData planned_identity = 7;
+    }
+}
+
+message ApplyResourceChange {
+    message Request {
+        string type_name = 1;
+        DynamicValue prior_state = 2;
+        DynamicValue planned_state = 3;
+        DynamicValue config = 4;
+        bytes planned_private = 5;
+        DynamicValue provider_meta = 6;
+        ResourceIdentityData planned_identity = 7;
+    }
+    message Response {
+        DynamicValue new_state = 1;
+        bytes private = 2;
+        repeated Diagnostic diagnostics = 3;
+        bool legacy_type_system = 4;
+        ResourceIdentityData new_identity = 5;
+    }
+}
+
+message ImportResourceState {
+    message Request {
+        string type_name = 1;
+        string id = 2;
+        ClientCapabilities client_capabilities = 3;
+        ResourceIdentityData identity = 4;
+    }
+    message ImportedResource {
+        string type_name = 1;
+        DynamicValue state = 2;
+        bytes private = 3;
+        ResourceIdentityData identity = 4;
+    }
+    message Response {
+        repeated ImportedResource imported_resources = 1;
+        repeated Diagnostic diagnostics = 2;
+        Deferred deferred = 3;
+    }
+}
+
+message MoveResourceState {
+    message Request {
+        string source_provider_address = 1;
+        string source_type_name = 2;
+        int64 source_schema_version = 3;
+        RawState source_state = 4;
+        string target_type_name = 5;
+        bytes source_private = 6;
+        RawState source_identity = 7;
+        int64 source_identity_schema_version = 8;
+    }
+    message Response {
+        DynamicValue target_state = 1;
+        repeated Diagnostic diagnostics = 2;
+        bytes target_private = 3;
+        ResourceIdentityData target_identity = 4;
+    }
+}
+
+message ReadDataSource {
+    message Request {
+        string type_name = 1;
+        DynamicValue config = 2;
+        DynamicValue provider_meta = 3;
+        ClientCapabilities client_capabilities = 4;
+    }
+    message Response {
+        DynamicValue state = 1;
+        repeated Diagnostic diagnostics = 2;
+        Deferred deferred = 3;
+    }
+}
+
+message GetFunctions {
+    message Request {}
+    message Response {
+        map<string, Function> functions = 1;
+        repeated Diagnostic diagnostics = 2;
+    }
+}
+
+message CallFunction {
+    message Request {
+        string name = 1;
+        repeated DynamicValue arguments = 2;
+    }
+    message Response {
+        DynamicValue result = 1;
+        FunctionError error = 2;
+    }
+}
+
+message ValidateEphemeralResourceConfig {
+    message Request {
+        string type_name = 1;
+        DynamicValue config = 2;
+    }
+    message Response {
+        repeated Diagnostic diagnostics = 1;
+    }
+}
+
+message OpenEphemeralResource {
+    message Request {
+        string type_name = 1;
+        DynamicValue config = 2;
+        ClientCapabilities client_capabilities = 3;
+    }
+    message Response {
+        repeated Diagnostic diagnostics = 1;
+        optional google.protobuf.Timestamp renew_at = 2;
+        DynamicValue result = 3;
+        optional bytes private = 4;
+        Deferred deferred = 5;
+    }
+}
+
+message RenewEphemeralResource {
+    message Request {
+        string type_name = 1;
+        optional bytes private = 2;
+    }
+    message Response {
+        repeated Diagnostic diagnostics = 1;
+        optional google.protobuf.Timestamp renew_at = 2;
+        optional bytes private = 3;
+    }
+}
+
+message CloseEphemeralResource {
+    message Request {
+        string type_name = 1;
+        optional bytes private = 2;
+    }
+    message Response {
+        repeated Diagnostic diagnostics = 1;
+    }
+}
+
+message GetResourceIdentitySchemas {
+    message Request {
+    }
+    message Response {
+        map<string, ResourceIdentitySchema> identity_schemas = 1;
+        repeated Diagnostic diagnostics = 2;
+    }
+}
+
+message UpgradeResourceIdentity {
+    message Request {
+        string type_name = 1;
+        int64 version = 2;
+        RawState raw_identity = 3;
+    }
+    message Response {
+        ResourceIdentityData upgraded_identity = 1;
+        repeated Diagnostic diagnostics = 2;
+    }
+}
