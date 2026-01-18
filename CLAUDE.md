@@ -106,10 +106,17 @@ message DynamicValue {
 | Proto definitions | `internal/tfplugin6/tfplugin6.proto` |
 | Registry client | `internal/getproviders/registry_client.go` |
 
+## Provider Instance Management
+
+Running providers are tracked by a key that includes namespace, name, and version: `{namespace}/{name}@{version}`. This allows multiple versions of the same provider to run simultaneously.
+
+- **Provider Key Format**: `hashicorp/kubernetes@2.25.0`
+- **StopProvider**: Requires namespace, name, and version to identify which provider instance to stop
+- **CreateProvider**: Returns existing instance if one with the same key is already running
+
 ## Limitations (First Iteration)
 
 - No lock file or checksum verification
-- No support for provider caching across multiple runs (version pinning)
 - Schema type conversion is simplified (may not handle all nested types)
 - Debug logging from go-plugin is verbose (goes to stderr)
 

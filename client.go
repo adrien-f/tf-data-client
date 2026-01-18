@@ -21,9 +21,10 @@ type ProviderConfig struct {
 	Version   string // Optional: specific version (e.g., "2.25.0"), empty = latest
 }
 
-// providerKey returns a unique key for a provider.
+// providerKey returns a unique key for a provider including version.
+// This allows running multiple versions of the same provider simultaneously.
 func (c ProviderConfig) providerKey() string {
-	return fmt.Sprintf("%s/%s", c.Namespace, c.Name)
+	return fmt.Sprintf("%s/%s@%s", c.Namespace, c.Name, c.Version)
 }
 
 // Client orchestrates provider lifecycle management.
@@ -73,18 +74,10 @@ func (c *Client) CreateProvider(ctx context.Context, cfg ProviderConfig) (*Provi
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	key := cfg.providerKey()
-
-	// Check if provider is already running
-	if existing, ok := c.providers[key]; ok {
-		return existing, nil
-	}
-
 	// Resolve version if not specified
-	version := cfg.Version
-	if version == "" {
+	if cfg.Version == "" {
 		var err error
-		version, err = c.registry.GetLatestVersion(ctx, cfg.Namespace, cfg.Name)
+		cfg.Version, err = c.registry.GetLatestVersion(ctx, cfg.Namespace, cfg.Name)
 		if err != nil {
 			return nil, &ErrProviderNotFound{
 				Namespace: cfg.Namespace,
@@ -93,19 +86,26 @@ func (c *Client) CreateProvider(ctx context.Context, cfg ProviderConfig) (*Provi
 		}
 	}
 
+	key := cfg.providerKey()
+
+	// Check if provider is already running
+	if existing, ok := c.providers[key]; ok {
+		return existing, nil
+	}
+
 	// Get executable path (from cache or download)
-	execPath, err := c.getOrDownloadProvider(ctx, cfg.Namespace, cfg.Name, version)
+	execPath, err := c.getOrDownloadProvider(ctx, cfg.Namespace, cfg.Name, cfg.Version)
 	if err != nil {
 		return nil, &ErrDownloadFailed{
 			Namespace: cfg.Namespace,
 			Name:      cfg.Name,
-			Version:   version,
+			Version:   cfg.Version,
 			Err:       err,
 		}
 	}
 
 	// Launch provider
-	c.logger.Info("launching provider", "namespace", cfg.Namespace, "name", cfg.Name, "version", version, "path", execPath)
+	c.logger.Info("launching provider", "namespace", cfg.Namespace, "name", cfg.Name, "version", cfg.Version, "path", execPath)
 	provider, err := launchProvider(execPath, c.logger)
 	if err != nil {
 		// Check for protocol version mismatch
@@ -114,7 +114,7 @@ func (c *Client) CreateProvider(ctx context.Context, cfg ProviderConfig) (*Provi
 			return nil, &ErrProtocolUnsupported{
 				Namespace:       cfg.Namespace,
 				Name:            cfg.Name,
-				Version:         version,
+				Version:         cfg.Version,
 				ProviderVersion: pm.pluginVersion,
 				ClientVersion:   pm.clientVersion,
 			}
@@ -122,7 +122,7 @@ func (c *Client) CreateProvider(ctx context.Context, cfg ProviderConfig) (*Provi
 		return nil, &ErrLaunchFailed{
 			Namespace: cfg.Namespace,
 			Name:      cfg.Name,
-			Version:   version,
+			Version:   cfg.Version,
 			Err:       err,
 		}
 	}
@@ -130,7 +130,7 @@ func (c *Client) CreateProvider(ctx context.Context, cfg ProviderConfig) (*Provi
 	// Set metadata
 	provider.Namespace = cfg.Namespace
 	provider.Name = cfg.Name
-	provider.Version = version
+	provider.Version = cfg.Version
 
 	// Get schema
 	if err := provider.getSchema(ctx); err != nil {
@@ -194,12 +194,12 @@ func (c *Client) getOrDownloadProvider(ctx context.Context, namespace, name, ver
 	return execPath, nil
 }
 
-// StopProvider stops a specific provider by namespace and name.
-func (c *Client) StopProvider(ctx context.Context, namespace, name string) error {
+// StopProvider stops a specific provider by namespace, name, and version.
+func (c *Client) StopProvider(ctx context.Context, namespace, name, version string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	key := fmt.Sprintf("%s/%s", namespace, name)
+	key := fmt.Sprintf("%s/%s@%s", namespace, name, version)
 	provider, ok := c.providers[key]
 	if !ok {
 		return nil
