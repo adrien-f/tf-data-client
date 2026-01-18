@@ -94,7 +94,7 @@ func (c *Client) CreateProvider(ctx context.Context, cfg ProviderConfig) (*Provi
 	}
 
 	// Get executable path (from cache or download)
-	execPath, err := c.getOrDownloadProvider(ctx, cfg.Namespace, cfg.Name, cfg.Version)
+	execPath, err := c.getOrDownloadProvider(ctx, cfg)
 	if err != nil {
 		return nil, &ErrDownloadFailed{
 			Namespace: cfg.Namespace,

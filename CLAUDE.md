@@ -56,7 +56,7 @@ Communicates with providers using HashiCorp's go-plugin:
 
 - **Schema Types**: JSON-encoded cty types in proto schema
 - **Values**: msgpack-encoded using `go-cty/cty/msgpack`
-- **Conversion**: `map[string]interface{}` ↔ `cty.Value` via JSON intermediary
+- **Conversion**: `map[string]any` ↔ `cty.Value` via JSON intermediary
 
 ## Protocol Details
 

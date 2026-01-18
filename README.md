@@ -59,7 +59,7 @@ func main() {
     fmt.Printf("Provider: %s/%s@%s\n", provider.Namespace, provider.Name, provider.Version)
 
     // Configure the provider
-    if err := provider.Configure(ctx, map[string]interface{}{
+    if err := provider.Configure(ctx, map[string]any{
         "region": "us-west-2",
     }); err != nil {
         log.Fatal(err)
@@ -110,7 +110,7 @@ if err != nil {
 }
 
 // Configure with kubeconfig
-err = provider.Configure(ctx, map[string]interface{}{
+err = provider.Configure(ctx, map[string]any{
     "config_path": "~/.kube/config",
 })
 if err != nil {
@@ -138,7 +138,7 @@ if err != nil {
     log.Fatal(err)
 }
 
-err = provider.Configure(ctx, map[string]interface{}{
+err = provider.Configure(ctx, map[string]any{
     "region": "us-west-2",
 })
 if err != nil {
