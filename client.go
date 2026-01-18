@@ -21,9 +21,9 @@ type ProviderConfig struct {
 	Version   string // Optional: specific version (e.g., "2.25.0"), empty = latest
 }
 
-// providerKey returns a unique key for a provider including version.
+// String returns a unique key for a provider including version.
 // This allows running multiple versions of the same provider simultaneously.
-func (c ProviderConfig) providerKey() string {
+func (c ProviderConfig) String() string {
 	return fmt.Sprintf("%s/%s@%s", c.Namespace, c.Name, c.Version)
 }
 
@@ -86,7 +86,7 @@ func (c *Client) CreateProvider(ctx context.Context, cfg ProviderConfig) (*Provi
 		}
 	}
 
-	key := cfg.providerKey()
+	key := cfg.String()
 
 	// Check if provider is already running
 	if existing, ok := c.providers[key]; ok {
@@ -148,11 +148,11 @@ func (c *Client) CreateProvider(ctx context.Context, cfg ProviderConfig) (*Provi
 
 // getOrDownloadProvider returns the path to a provider executable,
 // downloading it first if not cached.
-func (c *Client) getOrDownloadProvider(ctx context.Context, namespace, name, version string) (string, error) {
+func (c *Client) getOrDownloadProvider(ctx context.Context, cfg ProviderConfig) (string, error) {
 	id := cache.ProviderIdentifier{
-		Namespace: namespace,
-		Name:      name,
-		Version:   version,
+		Namespace: cfg.Namespace,
+		Name:      cfg.Name,
+		Version:   cfg.Version,
 		OS:        runtime.GOOS,
 		Arch:      runtime.GOARCH,
 	}
@@ -167,7 +167,7 @@ func (c *Client) getOrDownloadProvider(ctx context.Context, namespace, name, ver
 	}
 
 	// Get download info
-	downloadInfo, err := c.registry.GetDownloadInfo(ctx, namespace, name, version, runtime.GOOS, runtime.GOARCH)
+	downloadInfo, err := c.registry.GetDownloadInfo(ctx, cfg.Namespace, cfg.Name, cfg.Version, runtime.GOOS, runtime.GOARCH)
 	if err != nil {
 		return "", fmt.Errorf("failed to get download info: %w", err)
 	}
@@ -195,17 +195,16 @@ func (c *Client) getOrDownloadProvider(ctx context.Context, namespace, name, ver
 }
 
 // StopProvider stops a specific provider by namespace, name, and version.
-func (c *Client) StopProvider(ctx context.Context, namespace, name, version string) error {
+func (c *Client) StopProvider(ctx context.Context, providerConfig ProviderConfig) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	key := fmt.Sprintf("%s/%s@%s", namespace, name, version)
-	provider, ok := c.providers[key]
+	provider, ok := c.providers[providerConfig.String()]
 	if !ok {
 		return nil
 	}
 
-	delete(c.providers, key)
+	delete(c.providers, providerConfig.String())
 	return provider.Close()
 }
 
