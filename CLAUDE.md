@@ -58,6 +58,29 @@ Communicates with providers using HashiCorp's go-plugin:
 - **Values**: msgpack-encoded using `go-cty/cty/msgpack`
 - **Conversion**: `map[string]any` ↔ `cty.Value` via JSON intermediary
 
+#### Caveat: Double JSON Serialization
+
+The current implementation in `schema.go` uses JSON as an intermediate format to convert between `map[string]any` and `cty.Value`:
+
+```
+map[string]any → JSON → cty.Value → msgpack → GRPC → msgpack → cty.Value → JSON → map[string]any
+```
+
+This works but is inefficient. A more direct approach would use the `gocty` subpackage:
+
+```go
+import "github.com/zclconf/go-cty/cty/gocty"
+
+// Direct conversion without JSON round-trip
+var result map[string]any
+err := gocty.FromCtyValue(ctyVal, &result)
+
+// And the reverse
+ctyVal, err := gocty.ToCtyValue(input, ctyType)
+```
+
+The JSON approach was chosen for simplicity because `gocty` can be pickier about type matching. Worth revisiting if performance becomes a concern.
+
 ## Protocol Details
 
 The provider plugin protocol is defined in `internal/tfplugin6/tfplugin6.proto`:

@@ -84,7 +84,7 @@ func run() error {
 		return fmt.Errorf("failed to create provider: %w", err)
 	}
 
-	fmt.Fprintf(os.Stderr, "Provider %s/%s@%s ready\n", provider.Namespace, provider.Name, provider.Version)
+	fmt.Fprintf(os.Stderr, "Provider %s/%s@%s ready\n", namespace, name, *version)
 
 	// List data sources if requested
 	if *listDataSources {

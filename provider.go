@@ -54,8 +54,17 @@ type DataSourceResult struct {
 	State map[string]interface{}
 }
 
-// Provider wraps a GRPC provider client.
-type Provider struct {
+// Provider is the interface for interacting with a Terraform provider.
+type Provider interface {
+	Configure(ctx context.Context, config map[string]interface{}) error
+	ReadDataSource(ctx context.Context, typeName string, config map[string]interface{}) (*DataSourceResult, error)
+	IsConfigured() bool
+	ListDataSources() []string
+	Close() error
+}
+
+// provider wraps a GRPC provider client.
+type provider struct {
 	// Public metadata
 	Namespace string
 	Name      string
@@ -69,7 +78,7 @@ type Provider struct {
 }
 
 // launchProvider starts a provider binary and connects to it.
-func launchProvider(execPath string, logger logr.Logger) (*Provider, error) {
+func launchProvider(execPath string, logger logr.Logger) (*provider, error) {
 	config := &plugin.ClientConfig{
 		HandshakeConfig:  handshake,
 		AllowedProtocols: []plugin.Protocol{plugin.ProtocolGRPC},
@@ -111,14 +120,14 @@ func launchProvider(execPath string, logger logr.Logger) (*Provider, error) {
 		return nil, fmt.Errorf("unexpected provider type: %T", raw)
 	}
 
-	return &Provider{
+	return &provider{
 		pluginClient: client,
 		grpcClient:   grpcClient,
 	}, nil
 }
 
 // getSchema retrieves the provider schema.
-func (p *Provider) getSchema(ctx context.Context) error {
+func (p *provider) getSchema(ctx context.Context) error {
 	resp, err := p.grpcClient.GetProviderSchema(ctx, &tfplugin6.GetProviderSchema_Request{})
 	if err != nil {
 		return fmt.Errorf("failed to get provider schema: %w", err)
@@ -133,12 +142,12 @@ func (p *Provider) getSchema(ctx context.Context) error {
 }
 
 // IsConfigured returns whether the provider has been configured.
-func (p *Provider) IsConfigured() bool {
+func (p *provider) IsConfigured() bool {
 	return p.configured
 }
 
 // Configure configures the provider with the given configuration.
-func (p *Provider) Configure(ctx context.Context, config map[string]interface{}) error {
+func (p *provider) Configure(ctx context.Context, config map[string]interface{}) error {
 	if p.schema == nil {
 		return fmt.Errorf("schema not loaded")
 	}
@@ -180,7 +189,7 @@ func (p *Provider) Configure(ctx context.Context, config map[string]interface{})
 }
 
 // ListDataSources returns the list of available data source types.
-func (p *Provider) ListDataSources() []string {
+func (p *provider) ListDataSources() []string {
 	if p.schema == nil {
 		return nil
 	}
@@ -192,7 +201,7 @@ func (p *Provider) ListDataSources() []string {
 }
 
 // ReadDataSource reads a data source and returns the result.
-func (p *Provider) ReadDataSource(ctx context.Context, typeName string, config map[string]interface{}) (*DataSourceResult, error) {
+func (p *provider) ReadDataSource(ctx context.Context, typeName string, config map[string]interface{}) (*DataSourceResult, error) {
 	if p.schema == nil {
 		return nil, fmt.Errorf("schema not loaded")
 	}
@@ -247,7 +256,7 @@ func (p *Provider) ReadDataSource(ctx context.Context, typeName string, config m
 }
 
 // Close shuts down the provider process.
-func (p *Provider) Close() error {
+func (p *provider) Close() error {
 	if p.pluginClient != nil {
 		p.pluginClient.Kill()
 	}

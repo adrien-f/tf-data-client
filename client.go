@@ -32,7 +32,7 @@ type Client struct {
 	registry  registry.Registry
 	cache     cache.Cache
 	logger    logr.Logger
-	providers map[string]*Provider
+	providers map[string]*provider
 	mu        sync.Mutex
 }
 
@@ -42,7 +42,7 @@ type Client struct {
 // - Terraform registry
 func New(opts ...Option) (*Client, error) {
 	c := &Client{
-		providers: make(map[string]*Provider),
+		providers: make(map[string]*provider),
 		logger:    logr.Discard(),
 	}
 
@@ -70,7 +70,7 @@ func New(opts ...Option) (*Client, error) {
 
 // CreateProvider downloads (if needed), launches, and fetches schema for a provider.
 // If cfg.Version is empty, fetches and uses the latest version from registry.
-func (c *Client) CreateProvider(ctx context.Context, cfg ProviderConfig) (*Provider, error) {
+func (c *Client) CreateProvider(ctx context.Context, cfg ProviderConfig) (Provider, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
