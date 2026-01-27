@@ -4,6 +4,7 @@ go 1.25.5
 
 require (
 	github.com/go-logr/logr v1.4.3
+	github.com/gofrs/flock v0.13.0
 	github.com/hashicorp/go-hclog v1.6.3
 	github.com/hashicorp/go-plugin v1.7.0
 	github.com/zclconf/go-cty v1.17.0

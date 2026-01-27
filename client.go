@@ -157,41 +157,29 @@ func (c *Client) getOrDownloadProvider(ctx context.Context, cfg ProviderConfig) 
 		Arch:      runtime.GOARCH,
 	}
 
-	// Check cache
-	execPath, err := c.cache.Get(ctx, id)
-	if err != nil {
-		return "", fmt.Errorf("cache lookup failed: %w", err)
-	}
-	if execPath != "" {
-		return execPath, nil
-	}
+	return c.cache.GetOrPut(ctx, id, func(ctx context.Context) (string, func(), error) {
+		// Get download info
+		downloadInfo, err := c.registry.GetDownloadInfo(ctx, cfg.Namespace, cfg.Name, cfg.Version, runtime.GOOS, runtime.GOARCH)
+		if err != nil {
+			return "", nil, fmt.Errorf("failed to get download info: %w", err)
+		}
 
-	// Get download info
-	downloadInfo, err := c.registry.GetDownloadInfo(ctx, cfg.Namespace, cfg.Name, cfg.Version, runtime.GOOS, runtime.GOARCH)
-	if err != nil {
-		return "", fmt.Errorf("failed to get download info: %w", err)
-	}
+		// Download to temp file
+		tmpFile, err := os.CreateTemp("", "provider-*.zip")
+		if err != nil {
+			return "", nil, fmt.Errorf("failed to create temp file: %w", err)
+		}
+		tmpPath := tmpFile.Name()
+		tmpFile.Close()
+		cleanup := func() { os.Remove(tmpPath) }
 
-	// Download to temp file
-	tmpFile, err := os.CreateTemp("", "provider-*.zip")
-	if err != nil {
-		return "", fmt.Errorf("failed to create temp file: %w", err)
-	}
-	tmpPath := tmpFile.Name()
-	tmpFile.Close()
-	defer os.Remove(tmpPath)
+		if err := c.registry.DownloadToPath(ctx, downloadInfo, tmpPath); err != nil {
+			cleanup()
+			return "", nil, fmt.Errorf("failed to download provider: %w", err)
+		}
 
-	if err := c.registry.DownloadToPath(ctx, downloadInfo, tmpPath); err != nil {
-		return "", fmt.Errorf("failed to download provider: %w", err)
-	}
-
-	// Extract to cache
-	execPath, err = c.cache.Put(ctx, id, tmpPath)
-	if err != nil {
-		return "", fmt.Errorf("failed to cache provider: %w", err)
-	}
-
-	return execPath, nil
+		return tmpPath, cleanup, nil
+	})
 }
 
 // StopProvider stops a specific provider by namespace, name, and version.

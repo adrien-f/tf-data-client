@@ -14,4 +14,10 @@ type Cache interface {
 
 	// Has checks if a provider is cached.
 	Has(ctx context.Context, id ProviderIdentifier) (bool, error)
+
+	// GetOrPut atomically retrieves a cached provider or invokes downloadFn to populate it.
+	// downloadFn should download the provider and return path to archive + cleanup function.
+	// This method is safe for concurrent use across multiple processes.
+	GetOrPut(ctx context.Context, id ProviderIdentifier,
+		downloadFn func(ctx context.Context) (archivePath string, cleanup func(), err error)) (executablePath string, err error)
 }
