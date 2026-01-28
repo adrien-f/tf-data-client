@@ -3,8 +3,8 @@ package tfclient
 import (
 	"net/http"
 
-	"github.com/adrien-f/tf-data-client/cache"
-	"github.com/adrien-f/tf-data-client/registry"
+	"github.com/infracollect/tf-data-client/cache"
+	"github.com/infracollect/tf-data-client/registry"
 	"github.com/go-logr/logr"
 )
 

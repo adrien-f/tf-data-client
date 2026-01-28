@@ -6,19 +6,18 @@ A Go library and CLI for directly communicating with Terraform/OpenTofu provider
 > While OpenTofu is mentioned in the codebase, the current Hashicorp Terraform registry is used
 > The plan is to migrate at a later date to the new registry when ready
 
-
 ## Installation
 
 ### Library
 
 ```bash
-go get github.com/adrien-f/opentofu-data-client
+go get github.com/infracollect/tf-data-client
 ```
 
 ### CLI
 
 ```bash
-go install github.com/adrien-f/opentofu-data-client/cmd/opentofu-data-client@latest
+go install github.com/infracollect/tf-data-client/cmd/tf-data-client@latest
 ```
 
 ## Library Usage
@@ -33,7 +32,7 @@ import (
     "fmt"
     "log"
 
-    otfclient "github.com/adrien-f/opentofu-data-client"
+    otfclient "github.com/infracollect/tf-data-client"
 )
 
 func main() {
@@ -159,7 +158,7 @@ fmt.Printf("Account ID: %s\n", result.State["account_id"])
 ### List Data Sources
 
 ```bash
-opentofu-data-client \
+tf-data-client \
   --provider hashicorp/kubernetes \
   --list-data-sources
 ```
@@ -167,7 +166,7 @@ opentofu-data-client \
 ### Read a Data Source
 
 ```bash
-opentofu-data-client \
+tf-data-client \
   --provider hashicorp/kubernetes \
   --config '{"config_path": "~/.kube/config"}' \
   --data-source kubernetes_all_namespaces
@@ -176,7 +175,7 @@ opentofu-data-client \
 ### Pin Provider Version
 
 ```bash
-opentofu-data-client \
+tf-data-client \
   --provider hashicorp/aws \
   --version 5.0.0 \
   --config '{"region": "us-west-2"}' \
@@ -186,7 +185,7 @@ opentofu-data-client \
 ### Output to File
 
 ```bash
-opentofu-data-client \
+tf-data-client \
   --provider hashicorp/aws \
   --config '{"region": "us-west-2"}' \
   --data-source aws_caller_identity \
@@ -196,7 +195,7 @@ opentofu-data-client \
 ### Custom Cache Directory
 
 ```bash
-opentofu-data-client \
+tf-data-client \
   --provider hashicorp/aws \
   --cache-dir /tmp/providers \
   --list-data-sources
@@ -205,7 +204,7 @@ opentofu-data-client \
 ## Package Structure
 
 ```
-github.com/adrien-f/opentofu-data-client/
+github.com/infracollect/tf-data-client/
 ├── client.go              # Client type - main entry point
 ├── options.go             # Functional options
 ├── errors.go              # Custom error types
@@ -218,7 +217,7 @@ github.com/adrien-f/opentofu-data-client/
 ├── registry/
 │   ├── registry.go        # Registry interface + Terraform implementation
 │   └── types.go           # VersionInfo, DownloadInfo
-└── cmd/opentofu-data-client/
+└── cmd/tf-data-client/
     └── main.go            # CLI
 ```
 
@@ -281,6 +280,28 @@ if err != nil {
 }
 ```
 
+## Development
+
+### Regenerating gRPC Code
+
+The gRPC client code is generated from the proto file at `internal/tfplugin6/tfplugin6.proto`. To regenerate:
+
+1. Install the required protoc plugins:
+
+   ```bash
+   go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+   go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+   ```
+
+2. Ensure `protoc` is installed (e.g., `brew install protobuf` on macOS)
+
+3. Generate the code:
+   ```bash
+   protoc --go_out=. --go_opt=module=github.com/infracollect/tf-data-client \
+          --go-grpc_out=. --go-grpc_opt=module=github.com/infracollect/tf-data-client \
+          internal/tfplugin6/tfplugin6.proto
+   ```
+
 ## Limitations
 
 - No lock file or checksum verification
@@ -292,9 +313,11 @@ if err != nil {
 This client only supports providers that implement **Protocol v6** (tfplugin6). Some older providers still use Protocol v5 and are not compatible.
 
 **Known v5-only providers** (incompatible):
+
 - `hashicorp/random` (as of v3.8.0)
 
 **Compatible v6 providers** include:
+
 - `hashicorp/aws`
 - `hashicorp/google`
 - `hashicorp/kubernetes`
@@ -302,9 +325,11 @@ This client only supports providers that implement **Protocol v6** (tfplugin6). 
 - Most actively maintained providers
 
 If you encounter an error like:
+
 ```
 provider hashicorp/random@3.8.0 uses plugin protocol v5, but this client only supports protocol v6
 ```
+
 This means the provider hasn't been updated to support Protocol v6. Check if a newer version exists or try an alternative provider
 
 ## License

@@ -9,7 +9,7 @@ import (
 	"os"
 	"strings"
 
-	tfclient "github.com/adrien-f/tf-data-client"
+	tfclient "github.com/infracollect/tf-data-client"
 	"github.com/go-logr/logr"
 )
 

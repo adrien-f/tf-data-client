@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/adrien-f/tf-data-client/internal/tfplugin6"
+	"github.com/infracollect/tf-data-client/internal/tfplugin6"
 	"github.com/zclconf/go-cty/cty"
 	ctyjson "github.com/zclconf/go-cty/cty/json"
 	"github.com/zclconf/go-cty/cty/msgpack"
@@ -104,7 +104,7 @@ func nestedObjectToType(obj *tfplugin6.Schema_Object) (cty.Type, error) {
 }
 
 // mapToCtyValue converts a Go map to a cty.Value using the given type
-func mapToCtyValue(m map[string]interface{}, ty cty.Type) (cty.Value, error) {
+func mapToCtyValue(m map[string]any, ty cty.Type) (cty.Value, error) {
 	if m == nil {
 		return cty.NullVal(ty), nil
 	}
@@ -123,7 +123,7 @@ func mapToCtyValue(m map[string]interface{}, ty cty.Type) (cty.Value, error) {
 }
 
 // ctyValueToMap converts a cty.Value to a Go map
-func ctyValueToMap(val cty.Value) (map[string]interface{}, error) {
+func ctyValueToMap(val cty.Value) (map[string]any, error) {
 	if val.IsNull() {
 		return nil, nil
 	}
@@ -133,7 +133,7 @@ func ctyValueToMap(val cty.Value) (map[string]interface{}, error) {
 		return nil, fmt.Errorf("failed to marshal cty value to JSON: %w", err)
 	}
 
-	var result map[string]interface{}
+	var result map[string]any
 	if err := json.Unmarshal(jsonBytes, &result); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal JSON to map: %w", err)
 	}

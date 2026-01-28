@@ -7,7 +7,7 @@ import (
 	"regexp"
 	"strconv"
 
-	"github.com/adrien-f/tf-data-client/internal/tfplugin6"
+	"github.com/infracollect/tf-data-client/internal/tfplugin6"
 	"github.com/go-logr/logr"
 	"github.com/hashicorp/go-plugin"
 	"github.com/zclconf/go-cty/cty/msgpack"
