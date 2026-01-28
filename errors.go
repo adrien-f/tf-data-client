@@ -2,14 +2,23 @@ package tfclient
 
 import "fmt"
 
-// ErrProviderNotFound is returned when a provider cannot be found in the registry.
+// ErrProviderNotFound is returned when a provider cannot be found in the registry
+// (e.g. resolving latest version or when the provider does not exist).
 type ErrProviderNotFound struct {
 	Namespace string
 	Name      string
+	Err       error
 }
 
 func (e *ErrProviderNotFound) Error() string {
+	if e.Err != nil {
+		return fmt.Sprintf("provider not found: %s/%s: %v", e.Namespace, e.Name, e.Err)
+	}
 	return fmt.Sprintf("provider not found: %s/%s", e.Namespace, e.Name)
+}
+
+func (e *ErrProviderNotFound) Unwrap() error {
+	return e.Err
 }
 
 // ErrVersionNotFound is returned when a specific version of a provider cannot be found.

@@ -56,7 +56,7 @@ func main() {
         log.Fatal(err)
     }
 
-    fmt.Printf("Provider: %s/%s@%s\n", provider.Namespace, provider.Name, provider.Version)
+    fmt.Printf("Provider: %s\n", provider.Config().String())
 
     // Configure the provider
     if err := provider.Configure(ctx, map[string]any{

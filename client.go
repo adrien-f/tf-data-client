@@ -14,11 +14,12 @@ import (
 	"github.com/go-logr/logr"
 )
 
-// ProviderConfig specifies which provider to create.
+// ProviderConfig identifies a provider. Used as input to CreateProvider/StopProvider
+// and returned from Provider.Config() with the actual resolved version.
 type ProviderConfig struct {
 	Namespace string // e.g., "hashicorp"
 	Name      string // e.g., "kubernetes"
-	Version   string // Optional: specific version (e.g., "2.25.0"), empty = latest
+	Version   string // CreateProvider: optional (empty = latest). Config(): always resolved version.
 }
 
 // String returns a unique key for a provider including version.
@@ -27,13 +28,19 @@ func (c ProviderConfig) String() string {
 	return fmt.Sprintf("%s/%s@%s", c.Namespace, c.Name, c.Version)
 }
 
+// providerKey returns the map key for a provider by resolved version.
+func providerKey(namespace, name, resolvedVersion string) string {
+	return fmt.Sprintf("%s/%s@%s", namespace, name, resolvedVersion)
+}
+
 // Client orchestrates provider lifecycle management.
 type Client struct {
-	registry  registry.Registry
-	cache     cache.Cache
-	logger    logr.Logger
-	providers map[string]*provider
-	mu        sync.Mutex
+	registry   registry.Registry
+	cache      cache.Cache
+	logger     logr.Logger
+	providers  map[string]*provider   // key = providerKey(ns, name, resolvedVersion)
+	latestKeys map[string]string      // "namespace/name" -> resolved key, when created with Version ""
+	mu         sync.Mutex
 }
 
 // New creates a new Client with the given options.
@@ -42,8 +49,9 @@ type Client struct {
 // - Terraform registry
 func New(opts ...Option) (*Client, error) {
 	c := &Client{
-		providers: make(map[string]*provider),
-		logger:    logr.Discard(),
+		providers:  make(map[string]*provider),
+		latestKeys: make(map[string]string),
+		logger:     logr.Discard(),
 	}
 
 	for _, opt := range opts {
@@ -70,51 +78,56 @@ func New(opts ...Option) (*Client, error) {
 
 // CreateProvider downloads (if needed), launches, and fetches schema for a provider.
 // If cfg.Version is empty, fetches and uses the latest version from registry.
+// The returned Provider.Config() has the actual resolved version (use it for StopProvider if you passed "").
 func (c *Client) CreateProvider(ctx context.Context, cfg ProviderConfig) (Provider, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	// Resolve version if not specified
-	if cfg.Version == "" {
-		var err error
-		cfg.Version, err = c.registry.GetLatestVersion(ctx, cfg.Namespace, cfg.Name)
+	version := cfg.Version
+	if version == "" {
+		latest, err := c.registry.GetLatestVersion(ctx, cfg.Namespace, cfg.Name)
 		if err != nil {
 			return nil, &ErrProviderNotFound{
 				Namespace: cfg.Namespace,
 				Name:      cfg.Name,
+				Err:       err,
 			}
 		}
+		version = latest
 	}
 
-	key := cfg.String()
+	key := providerKey(cfg.Namespace, cfg.Name, version)
 
-	// Check if provider is already running
+	// Check if provider is already running (match "" or specific version)
 	if existing, ok := c.providers[key]; ok {
+		if cfg.Version == "" {
+			c.latestKeys[cfg.Namespace+"/"+cfg.Name] = key
+		}
 		return existing, nil
 	}
 
-	// Get executable path (from cache or download)
-	execPath, err := c.getOrDownloadProvider(ctx, cfg)
+	// Get executable path (from cache or download) using resolved version
+	execPath, err := c.getOrDownloadProvider(ctx, cfg.Namespace, cfg.Name, version)
 	if err != nil {
 		return nil, &ErrDownloadFailed{
 			Namespace: cfg.Namespace,
 			Name:      cfg.Name,
-			Version:   cfg.Version,
+			Version:   version,
 			Err:       err,
 		}
 	}
 
 	// Launch provider
-	c.logger.Info("launching provider", "namespace", cfg.Namespace, "name", cfg.Name, "version", cfg.Version, "path", execPath)
+	c.logger.V(1).Info("launching provider", "namespace", cfg.Namespace, "name", cfg.Name, "version", version, "path", execPath)
 	provider, err := launchProvider(execPath, c.logger)
 	if err != nil {
-		// Check for protocol version mismatch
 		var pm *errProtocolMismatch
 		if errors.As(err, &pm) {
 			return nil, &ErrProtocolUnsupported{
 				Namespace:       cfg.Namespace,
 				Name:            cfg.Name,
-				Version:         cfg.Version,
+				Version:         version,
 				ProviderVersion: pm.pluginVersion,
 				ClientVersion:   pm.clientVersion,
 			}
@@ -122,17 +135,15 @@ func (c *Client) CreateProvider(ctx context.Context, cfg ProviderConfig) (Provid
 		return nil, &ErrLaunchFailed{
 			Namespace: cfg.Namespace,
 			Name:      cfg.Name,
-			Version:   cfg.Version,
+			Version:   version,
 			Err:       err,
 		}
 	}
 
-	// Set metadata
-	provider.Namespace = cfg.Namespace
-	provider.Name = cfg.Name
-	provider.Version = cfg.Version
+	provider.namespace = cfg.Namespace
+	provider.name = cfg.Name
+	provider.version = version
 
-	// Get schema
 	if err := provider.getSchema(ctx); err != nil {
 		provider.Close()
 		return nil, &ErrSchemaFailed{
@@ -143,28 +154,29 @@ func (c *Client) CreateProvider(ctx context.Context, cfg ProviderConfig) (Provid
 	}
 
 	c.providers[key] = provider
+	if cfg.Version == "" {
+		c.latestKeys[cfg.Namespace+"/"+cfg.Name] = key
+	}
 	return provider, nil
 }
 
 // getOrDownloadProvider returns the path to a provider executable,
 // downloading it first if not cached.
-func (c *Client) getOrDownloadProvider(ctx context.Context, cfg ProviderConfig) (string, error) {
+func (c *Client) getOrDownloadProvider(ctx context.Context, namespace, name, version string) (string, error) {
 	id := cache.ProviderIdentifier{
-		Namespace: cfg.Namespace,
-		Name:      cfg.Name,
-		Version:   cfg.Version,
+		Namespace: namespace,
+		Name:      name,
+		Version:   version,
 		OS:        runtime.GOOS,
 		Arch:      runtime.GOARCH,
 	}
 
 	return c.cache.GetOrPut(ctx, id, func(ctx context.Context) (string, func(), error) {
-		// Get download info
-		downloadInfo, err := c.registry.GetDownloadInfo(ctx, cfg.Namespace, cfg.Name, cfg.Version, runtime.GOOS, runtime.GOARCH)
+		downloadInfo, err := c.registry.GetDownloadInfo(ctx, namespace, name, version, runtime.GOOS, runtime.GOARCH)
 		if err != nil {
 			return "", nil, fmt.Errorf("failed to get download info: %w", err)
 		}
 
-		// Download to temp file
 		tmpFile, err := os.CreateTemp("", "provider-*.zip")
 		if err != nil {
 			return "", nil, fmt.Errorf("failed to create temp file: %w", err)
@@ -183,17 +195,31 @@ func (c *Client) getOrDownloadProvider(ctx context.Context, cfg ProviderConfig) 
 }
 
 // StopProvider stops a specific provider by namespace, name, and version.
-func (c *Client) StopProvider(ctx context.Context, providerConfig ProviderConfig) error {
+func (c *Client) StopProvider(ctx context.Context, cfg ProviderConfig) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	provider, ok := c.providers[providerConfig.String()]
+	var key string
+	if cfg.Version == "" {
+		key = c.latestKeys[cfg.Namespace+"/"+cfg.Name]
+	} else {
+		key = providerKey(cfg.Namespace, cfg.Name, cfg.Version)
+	}
+
+	provider, ok := c.providers[key]
 	if !ok {
 		return nil
 	}
 
-	delete(c.providers, providerConfig.String())
-	return provider.Close()
+	if err := provider.Close(); err != nil {
+		return err
+	}
+
+	delete(c.providers, key)
+	if cfg.Version == "" {
+		delete(c.latestKeys, cfg.Namespace+"/"+cfg.Name)
+	}
+	return nil
 }
 
 // Close stops all running providers.
@@ -207,6 +233,9 @@ func (c *Client) Close() error {
 			lastErr = err
 		}
 		delete(c.providers, key)
+	}
+	for k := range c.latestKeys {
+		delete(c.latestKeys, k)
 	}
 	return lastErr
 }

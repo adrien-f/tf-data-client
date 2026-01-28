@@ -61,14 +61,17 @@ type Provider interface {
 	IsConfigured() bool
 	ListDataSources() []string
 	Close() error
+
+	// Config returns the provider identity. Version is always the resolved version (e.g. from latest when not specified).
+	Config() ProviderConfig
 }
 
 // provider wraps a GRPC provider client.
 type provider struct {
-	// Public metadata
-	Namespace string
-	Name      string
-	Version   string
+	// Metadata (exposed via interface methods)
+	namespace string
+	name      string
+	version   string
 
 	// Private fields
 	pluginClient *plugin.Client
@@ -146,6 +149,11 @@ func (p *provider) IsConfigured() bool {
 	return p.configured
 }
 
+// Config returns the provider identity with resolved version.
+func (p *provider) Config() ProviderConfig {
+	return ProviderConfig{Namespace: p.namespace, Name: p.name, Version: p.version}
+}
+
 // Configure configures the provider with the given configuration.
 func (p *provider) Configure(ctx context.Context, config map[string]interface{}) error {
 	if p.schema == nil {
@@ -210,8 +218,8 @@ func (p *provider) ReadDataSource(ctx context.Context, typeName string, config m
 	if !ok {
 		return nil, &ErrDataSourceNotFound{
 			TypeName:  typeName,
-			Namespace: p.Namespace,
-			Name:      p.Name,
+			Namespace: p.namespace,
+			Name:      p.name,
 		}
 	}
 
